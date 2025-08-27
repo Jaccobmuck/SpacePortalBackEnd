@@ -1,0 +1,6 @@
+@SpacePortalBackEnd_HostAddress = http://localhost:5274
+
+GET {{SpacePortalBackEnd_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
