@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore.Metadata.Internal;
 
 namespace SpacePortalBackEnd.Models
 {
+    [Table("Event")]
     public class Event
     {
         [Key]

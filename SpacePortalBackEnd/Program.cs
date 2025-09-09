@@ -1,4 +1,10 @@
+using Microsoft.EntityFrameworkCore;
+using SpacePortalBackEnd.Models;
+
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddDbContext<MyContext>(options =>
+    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 // Add services to the container.
 
