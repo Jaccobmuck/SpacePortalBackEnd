@@ -6,13 +6,13 @@ namespace SpacePortalBackEnd.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    public class EventController : ControllerBase
+    public class EventTypeController : ControllerBase
     {
         private readonly MyContext _db; // Database context for accessing data
-        private readonly ILogger<Event> _logger; // Logger for error and info logging
+        private readonly ILogger<EventType> _logger; // Logger for error and info logging
 
         // Constructor injects database context and logger
-        public EventController(MyContext db, ILogger<Event> logger)
+        public EventTypeController(MyContext db, ILogger<EventType> logger)
         {
             _db = db;
             _logger = logger;
@@ -20,11 +20,11 @@ namespace SpacePortalBackEnd.Controllers
 
         [HttpGet("[action]")]
         // All roles will have access to this endpoint
-        public async Task<IActionResult> GetEvent() // Retrieves all events
+        public async Task<IActionResult> GetEventTypes() // Retrieves all events
         {
             try
             {
-                var events = await _db.Events.ToListAsync(); // Fetches all events asynchronously
+                var events = await _db.EventTypes.ToListAsync(); // Fetches all events asynchronously
                 return Ok(events); // Returns the list of events with HTTP 200
             }
             catch (Exception e)
@@ -37,7 +37,7 @@ namespace SpacePortalBackEnd.Controllers
 
         [HttpPost("[action]")]
         // Only admins will have access to this endpoint
-        public async Task<IActionResult> AddEvent([FromBody] Event newEvent) // Adds a new event
+        public async Task<IActionResult> AddEventType([FromBody] EventType newEvent) // Adds a new event
         {
             try
             {
@@ -45,14 +45,11 @@ namespace SpacePortalBackEnd.Controllers
                 {
                     return BadRequest("Event is null"); // Returns HTTP 400 if input is null
                 }
-                var model = new Event // Creates a new event instance
+                var model = new EventType // Creates a new event instance
                 {
-                    EventTypeId = newEvent.EventTypeId,
-                    ExternalId = newEvent.ExternalId,
-                    Description = newEvent.Description,
-                    Name = newEvent.Name
+                    Description = newEvent.Description
                 };
-                _db.Events.Add(model); // Adds the event to the database
+                _db.EventTypes.Add(model); // Adds the event to the database
                 await _db.SaveChangesAsync(); // Saves changes asynchronously
 
                 return Ok(model); // Returns the created event with HTTP 200
@@ -67,7 +64,7 @@ namespace SpacePortalBackEnd.Controllers
 
         [HttpPut("[action]/{id}")]
         // Updates an existing event by ID
-        public async Task<IActionResult> UpdateEvent([FromBody] Event value, long id)
+        public async Task<IActionResult> UpdateEventType([FromBody] EventType value, long id)
         {
             if (value == null) // Validates input
             {
@@ -75,7 +72,7 @@ namespace SpacePortalBackEnd.Controllers
             }
             try
             {
-                var Event = await _db.Events.FindAsync(id); // Finds the event by ID
+                var Event = await _db.EventTypes.FindAsync(id); // Finds the event by ID
 
                 if (Event == null) // Checks if event exists
                 {
@@ -83,10 +80,7 @@ namespace SpacePortalBackEnd.Controllers
                 }
 
                 // Updates event properties
-                Event.EventTypeId = value.EventTypeId;
-                Event.ExternalId = value.ExternalId;
                 Event.Description = value.Description;
-                Event.Name = value.Name;
 
                 await _db.SaveChangesAsync(); // Saves changes asynchronously
 
@@ -102,11 +96,11 @@ namespace SpacePortalBackEnd.Controllers
 
         [HttpDelete("[action]")]
         // Deletes an event by ID
-        public async Task<IActionResult> DeleteEvent(long id)
+        public async Task<IActionResult> DeleteEventType(long id)
         {
             try
             {
-                var Event = await _db.Events.FindAsync(id); // Finds the event by ID
+                var Event = await _db.EventTypes.FindAsync(id); // Finds the event by ID
                 if (Event == null) // Checks if event exists
                 {
                     return NotFound($"Event with ID {id} not found"); // Returns HTTP 404 if not found

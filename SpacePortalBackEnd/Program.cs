@@ -1,10 +1,15 @@
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 using SpacePortalBackEnd.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddDbContext<MyContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+var nasaKey = builder.Configuration["Nasa:ApiKey"]; // Get the API key from appsettings.json
+
+builder.Services.AddHttpClient("Donki", client =>
+{
+    client.BaseAddress = new Uri("https://api.nasa.gov/DONKI/");
+});
 
 // Add services to the container.
 
@@ -22,6 +27,10 @@ builder.Services.AddCors(options =>
                   .AllowAnyMethod();
         });
 });
+builder.Services.AddDbContext<MyContext>(options =>
+    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+// builder.Services.AddScoped<DonkiService>();
 
 var app = builder.Build();
 

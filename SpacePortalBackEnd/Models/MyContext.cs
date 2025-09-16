@@ -8,5 +8,7 @@ namespace SpacePortalBackEnd.Models
 
        public DbSet<Event> Events { get; set; }
 
+        public DbSet<EventType> EventTypes { get; set; }
+
     }
 }

@@ -12,6 +12,9 @@ namespace SpacePortalBackEnd.Models
         [ForeignKey("EventType")]
         public long EventTypeId { get; set; }
         public string? ExternalId { get; set; }
+        public DateTime? StartAt { get; set; }
+        public DateTime? OccuredAt { get; set; }
+        public DateTime? EndAt { get; set; }
         public string? Description { get; set; }
         public string? Name { get; set; }
     }
