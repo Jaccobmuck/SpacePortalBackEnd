@@ -85,7 +85,7 @@ namespace SpacePortalBackEnd.Controllers
                 // Updates event properties
                 Event.EventTypeId = value.EventTypeId;
                 Event.ExternalId = value.ExternalId;
-                Event.Description = value.Description;
+                Event.Description = value.Description; 
                 Event.Name = value.Name;
 
                 await _db.SaveChangesAsync(); // Saves changes asynchronously

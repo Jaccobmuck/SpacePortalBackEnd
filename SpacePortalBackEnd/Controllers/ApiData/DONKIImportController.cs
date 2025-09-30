@@ -10,12 +10,12 @@ namespace SpacePortalBackEnd.Controllers.ApiData
     public class DONKIImportController : ControllerBase
     {
         // Factory for http client instances, ASP.Net Core built-in DI
-        private readonly IHttpClientFactory _http; // making http reqs
+        private readonly IHttpClientFactory _http; // Making http reqs
         private readonly ILogger<DONKIImportController> _logger; // logging errors and info
-        private readonly IConfiguration _config; // accessing config settings -> appsettings.json or env vars
-        private readonly MyContext _db; // database context for accessing data
+        private readonly IConfiguration _config; // Accessing config settings -> appsettings.json or env vars
+        private readonly MyContext _db; // Database context for accessing data
 
-        // constructor injects http client factory, logger, config, and database context
+        // Constructor injects http client factory, logger, config, and database context
         public DONKIImportController(IHttpClientFactory http, ILogger<DONKIImportController> logger, IConfiguration config, MyContext db)
         {
             _http = http;
@@ -25,7 +25,7 @@ namespace SpacePortalBackEnd.Controllers.ApiData
         }
 
         [HttpPost("flares")]
-        //   POST /api/import/donki/flares?start=2016-01-01&end=2016-01-30
+        // POST /api/import/donki/flares?start=2016-01-01&end=2016-01-30
         // Both query params are optional. If nothing is entered, defaults to the last 30 days.
         public async Task<IActionResult> ImportFlares([FromQuery] DateTime? start, [FromQuery] DateTime? end)
         {
@@ -139,7 +139,5 @@ namespace SpacePortalBackEnd.Controllers.ApiData
                 } 
             });
         }
-
-
     }
 }
