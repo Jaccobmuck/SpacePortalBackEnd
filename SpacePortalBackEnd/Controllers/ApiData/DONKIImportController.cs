@@ -1,22 +1,36 @@
-﻿using System.Text.Json;
+﻿// Required namespaces for JSON parsing, web API controllers, and EF Core database access.
+using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SpacePortalBackEnd.Models;
 
 namespace SpacePortalBackEnd.Controllers.ApiData
 {
+    // Marks this class as an API controller and sets the base route for all endpoints inside.
+    // This controller handles NASA DONKI (space weather) data import functionality.
     [ApiController]
     [Route("api/import/donki")]
-    public class DONKIImportController : ControllerBase
+    public class DONKIImportController : ControllerBase // i hate kobe and sofiia
     {
-        // Factory for http client instances, ASP.Net Core built-in DI
-        private readonly IHttpClientFactory _http; // Making http reqs
-        private readonly ILogger<DONKIImportController> _logger; // logging errors and info
-        private readonly IConfiguration _config; // Accessing config settings -> appsettings.json or env vars
-        private readonly MyContext _db; // Database context for accessing data
+        // IHttpClientFactory: Creates HttpClient instances efficiently (for external API calls).
+        // ILogger: For structured logging of information, warnings, and errors.
+        // IConfiguration: To read appsettings.json and environment variables.
+        // MyContext: Your Entity Framework Core database context for writing to the database.
+        private readonly IHttpClientFactory _http;
+        private readonly ILogger<DONKIImportController> _logger;
+        private readonly IConfiguration _config;
+        private readonly MyContext _db;
 
-        // Constructor injects http client factory, logger, config, and database context
-        public DONKIImportController(IHttpClientFactory http, ILogger<DONKIImportController> logger, IConfiguration config, MyContext db)
+        // limits how many records can be imported in one API call.
+            // nasa limits to 4000. 1000 will be plenty anyways
+        private const int MAX_IMPORT = 1000;
+
+        // Constructor: injects dependencies via ASP.NET Core’s built-in DI container.
+        public DONKIImportController(
+            IHttpClientFactory http,
+            ILogger<DONKIImportController> logger,
+            IConfiguration config,
+            MyContext db)
         {
             _http = http;
             _logger = logger;
@@ -24,102 +38,114 @@ namespace SpacePortalBackEnd.Controllers.ApiData
             _db = db;
         }
 
+        // Route: POST /api/import/donki/flares
+        // Purpose: Imports solar flare data from NASA’s DONKI API into your local database.
         [HttpPost("flares")]
-        // POST /api/import/donki/flares?start=2016-01-01&end=2016-01-30
-        // Both query params are optional. If nothing is entered, defaults to the last 30 days.
         public async Task<IActionResult> ImportFlares([FromQuery] DateTime? start, [FromQuery] DateTime? end)
         {
-            var s = start ?? DateTime.UtcNow.AddDays(-30);//   s = start (default: now-30d UTC) 
-            var e = end ?? DateTime.UtcNow;//   e = end   (default: now UTC)
-            // this is how the default to the last 30 days is used/accomplished. 
+            // Define the date range for the import:
+            // - If no start date is provided, defaults to one year ago.
+            // - If no end date is provided, defaults to current UTC date.
+            var s = start ?? DateTime.UtcNow.AddDays(-365); // Default start date (1 year ago)
+            var e = end ?? DateTime.UtcNow;                  // Default end date (now)
 
-            // NASA API key. Preferred path is "Nasa:ApiKey" (appsettings/user-secrets).
-            // The env var "NASA_API_KEY" is used as a fallback if the first is missing.
+            // Retrieve NASA API key from configuration (supports both appsettings and env variable)
             var key = _config["Nasa:ApiKey"] ?? _config["NASA_API_KEY"];
             if (string.IsNullOrWhiteSpace(key))
-            {
-                // 400 = client error; caller must supply/configure a key that is valid
                 return BadRequest("NASA ApiKey missing. Set Nasa:ApiKey (or env var NASA_API_KEY).");
-            }
 
-            // Create a typed HttpClient targeting DONKI with a friendly User-Agent.
+            // Create an HttpClient instance using the factory.
             var client = _http.CreateClient();
+
+            // Set NASA’s DONKI API base URL.
             client.BaseAddress = new Uri("https://api.nasa.gov/DONKI/");
+
+            // Add a user-agent header for API compliance (good API etiquette).
             client.DefaultRequestHeaders.UserAgent.ParseAdd("SpacePortal/1.0 (+https://localhost)");
 
-            // Build the FLR (Solar Flare) endpoint URL for the specified date window.
-            var url = $"FLR?startDate={s:yyyy-MM-dd}&endDate={e:yyyy-MM-dd}&api_key={key}"; // key is in appsettings.json
+            // Construct the full request URL to NASA’s DONKI “FLR” (solar flare) endpoint.
+            var url = $"FLR?startDate={s:yyyy-MM-dd}&endDate={e:yyyy-MM-dd}&api_key={key}";
 
-            // Issue the GET request and capture the raw body for parsing.
+            // Perform the HTTP GET request.
             var resp = await client.GetAsync(url);
+
+            // Read the full response body as a string.
             var body = await resp.Content.ReadAsStringAsync();
 
-            // If NASA rejected the call (e.g., invalid/missing key or rate limit),
+            // If NASA’s API returns an error (non-success HTTP code), report it back.
             if (!resp.IsSuccessStatusCode)
-            {   
-                // something went wrong with the request
-                return StatusCode((int)resp.StatusCode, new 
-                { 
+            {
+                return StatusCode((int)resp.StatusCode, new
+                {
                     message = "DONKI FLR failed",
-                    // Mask the key so it doesn't leak into logs or responses
-                    url = url.Replace(key, "***"), 
-                    body 
+                    url = url.Replace(key, "***"), // mask API key
+                    body
                 });
             }
 
-            // Parse the JSON body and ensure it's an array of flares.
+            // Parse the JSON response body.
             using var doc = JsonDocument.Parse(body);
+
+            // If the root element is not an array (unexpected schema), abort gracefully.
             if (doc.RootElement.ValueKind != JsonValueKind.Array)
-            {
-                // NASA changed shape or returned something unexpected; fail soft with a note.
                 return Ok(new { imported = 0, note = "Unexpected payload" });
+
+            // Convert JSON array to a list for enumeration and manipulation.
+            var flaresArray = doc.RootElement.EnumerateArray().ToList();
+
+            // Store total record count (for reporting and limiting).
+            int totalCount = flaresArray.Count;
+            bool capped = false;
+
+            // Enforce the 1000-import cap to prevent system overload or database bloat.
+            if (totalCount > MAX_IMPORT)
+            {
+                flaresArray = flaresArray.Take(MAX_IMPORT).ToList(); // i hate kobe and sofiia
+                capped = true;
             }
 
-            // Count how many new rows we actually inserted (not including updates)
-            // not neccessarily needed but is nice to have
+            // Track how many records were newly imported.
             int imported = 0;
 
-            // Loop over each flare in the array.
-            foreach (var flare in doc.RootElement.EnumerateArray())
+            // Loop through each flare entry in the JSON array.
+            foreach (var flare in flaresArray)
             {
-                // Unique identifier (used to dedupe imports across runs). Field: "flrID"
+                // Safely extract each field (NASA sometimes omits fields).
                 string? id = flare.TryGetProperty("flrID", out var idProp) ? idProp.GetString() : null;
+                if (string.IsNullOrWhiteSpace(id)) continue; // skip invalid records
 
-                // Skip any records without an ID—can't safely dedupe or reference them
-                if (string.IsNullOrWhiteSpace(id)) continue;
-
-                // Extract the begin, peak, and end times (if present)
                 DateTime? begin = flare.TryGetProperty("beginTime", out var bt) ? bt.GetDateTime() : (DateTime?)null;
                 DateTime? peak = flare.TryGetProperty("peakTime", out var pt) ? pt.GetDateTime() : (DateTime?)null;
                 DateTime? endt = flare.TryGetProperty("endTime", out var et) ? et.GetDateTime() : (DateTime?)null;
 
-                var occured = peak; // peak is the actual time it "occured" 
+                // OccurredAt is set to peakTime (when the flare was at maximum intensity).
+                var occured = peak;
                 if (occured is null) continue;
+                // i hate kobe and sofiia
 
                 string? classType = flare.TryGetProperty("classType", out var ct) ? ct.GetString() : null;
 
-                // Idempotency check: does an Event with this ExternalId already exist?
-                // AsNoTracking for performance since we only need existence.
+                // Check if this flare already exists in the database (by external ID).
                 var exists = await _db.Events.AsNoTracking().AnyAsync(ev => ev.ExternalId == id);
+
                 if (!exists)
                 {
-                    // Insert a new Event row populated from the DONKI payload.
+                    // If it doesn’t exist, add it as a new Event.
                     _db.Events.Add(new Event
                     {
-                        EventTypeId = 5, // SolarFlare. hard coded to be id = 5
+                        EventTypeId = 5, // likely your ID for “Solar Flare” type
                         ExternalId = id,
                         Name = $"{(string.IsNullOrWhiteSpace(classType) ? "Solar" : classType)} Flare",
                         Description = classType,
-                        StartAt = begin,    
-                        OccuredAt = occured,  
+                        StartAt = begin,
+                        OccuredAt = occured,
                         EndAt = endt
                     });
-                    imported++;// track inserts (not updates)
+                    imported++;
                 }
                 else
                 {
-                    // Optional upsert behavior if you re-run imports:
-                    // This can happen if NASA later refines times or adds more details.
+                    // If it already exists, update its details (times and description).
                     var ev = await _db.Events.FirstAsync(x => x.ExternalId == id);
                     ev.StartAt = begin;
                     ev.OccuredAt = occured;
@@ -128,15 +154,19 @@ namespace SpacePortalBackEnd.Controllers.ApiData
                 }
             }
 
+            // Commit all additions/updates to the database.
             await _db.SaveChangesAsync();
-            return Ok(new 
+
+            // Return a success response with metadata about the operation.
+            return Ok(new
             {
-                // Return effective date range used for the fetch.
-                imported, 
-                range = new 
-                { 
-                    start = s, end = e 
-                } 
+                imported,          // number of records imported
+                capped,            // whether the 1000 cap was applied
+                totalAvailable = totalCount, // total records available in NASA API
+                range = new { start = s, end = e }, // date range used for query
+                note = capped
+                    ? $"Import capped at {MAX_IMPORT} records to prevent overload."
+                    : "Import complete."
             });
         }
     }
