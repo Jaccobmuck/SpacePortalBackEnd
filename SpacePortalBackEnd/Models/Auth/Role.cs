@@ -6,10 +6,8 @@ namespace SpacePortalBackEnd.Models.Auth
     [Table("Role")]
     public class Role
     {
+        [Key]
         public long RoleId { get; set; }
-        [Required, MaxLength(50)]
-        public string Name { get; set; } = default!;
-        public string? Description { get; set; }
-        public ICollection<UserRole> UserRoles { get; set; } = new List<UserRole>();
+        public string Name { get; set; } = string.Empty;
     }
 }

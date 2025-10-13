@@ -8,60 +8,19 @@ namespace SpacePortalBackEnd.Models
         public MyContext(DbContextOptions<MyContext> options) : base(options) { }
         public DbSet<Event> Events { get; set; }
         public DbSet<EventType> EventTypes { get; set; }
-        public DbSet<User> Users => Set<User>();
-        public DbSet<Role> Roles => Set<Role>();
-        public DbSet<UserRole> UserRoles => Set<UserRole>();
+        public DbSet<User> User { get; set; }
+        public DbSet<Role> Role { get; set; }
 
-        protected override void OnModelCreating(ModelBuilder mb)
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
-            base.OnModelCreating(mb);
+            base.OnModelCreating(modelBuilder);
 
-            // User
-            mb.Entity<User>(e =>
-            {
-                e.ToTable("User");
-                e.HasKey(u => u.UserId);
-                e.HasIndex(u => u.Email).IsUnique();
+            var u = modelBuilder.Entity<User>();
 
-                // database default for CreatedAt
-                e.Property(u => u.CreatedAt)
-                 .HasDefaultValueSql("GETUTCDATE()");
+            u.Property(x => x.DisplayName).IsRequired().HasMaxLength(64);
+            u.HasIndex(x => x.DisplayName).IsUnique();
 
-                e.Property(u => u.IsActive).HasDefaultValue(true);
-            });
-
-            // Role
-            mb.Entity<Role>(e =>
-            {
-                e.ToTable("Role");
-                e.HasKey(r => r.RoleId);
-                e.Property(r => r.Name).IsRequired().HasMaxLength(50);
-                e.HasIndex(r => r.Name).IsUnique();
-
-                // Hardcode/seed roles
-                e.HasData(
-                    new Role { RoleId = 1, Name = "Guest", Description = "Read-only access" },
-                    new Role { RoleId = 2, Name = "User", Description = "Standard user" },
-                    new Role { RoleId = 3, Name = "Admin", Description = "Administrative" }
-                );
-            });
-
-            // UserRole (composite key)
-            mb.Entity<UserRole>(e =>
-            {
-                e.ToTable("UserRole");
-                e.HasKey(ur => new { ur.UserId, ur.RoleId });
-
-                e.HasOne(ur => ur.User)
-                 .WithMany(u => u.UserRoles)
-                 .HasForeignKey(ur => ur.UserId)
-                 .OnDelete(DeleteBehavior.Cascade);
-
-                e.HasOne(ur => ur.Role)
-                 .WithMany(r => r.UserRoles)
-                 .HasForeignKey(ur => ur.RoleId)
-                 .OnDelete(DeleteBehavior.Cascade);
-            });
+            u.Property(x => x.PasswordHash).IsRequired();
         }
 
     }

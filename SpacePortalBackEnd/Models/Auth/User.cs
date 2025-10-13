@@ -1,6 +1,5 @@
 ﻿using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
-using Microsoft.AspNetCore.Identity;
 
 namespace SpacePortalBackEnd.Models.Auth
 {
@@ -8,12 +7,15 @@ namespace SpacePortalBackEnd.Models.Auth
     public class User
     {
         public long UserId { get; set; }
-        public string Email { get; set; }
-        public string? DisplayName { get; set; }
-        public DateTime CreatedAt { get; set; }
-        public bool IsActive { get; set; }
-        [Required] public byte[] PasswordHash { get; set; } = default;
-        [Required] public byte[] PasswordSalt { get; set; } = default;
-        public ICollection<UserRole> UserRoles { get; set; } = new List<UserRole>();
+
+        public string? Email { get; set; }                 // optional (for now)
+        [Required, MaxLength(64)]
+        public string DisplayName { get; set; } = null!;   // required for login
+        public bool IsActive { get; set; } = true;         // required + default 1
+        [Required]
+        public string PasswordHash { get; set; } = null!;  // required
+        public long? RoleId { get; set; }
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     }
 }

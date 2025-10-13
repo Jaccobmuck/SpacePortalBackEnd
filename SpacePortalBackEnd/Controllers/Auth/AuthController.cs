@@ -1,98 +1,119 @@
-﻿using Microsoft.AspNetCore.Authorization;
+﻿using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Text;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.Data;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using SpacePortalBackEnd.Contracts;
+using Microsoft.IdentityModel.Tokens;
 using SpacePortalBackEnd.Models;
 using SpacePortalBackEnd.Models.Auth;
-using SpacePortalBackEnd.Security;
 
 namespace SpacePortalBackEnd.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-public class AuthController(MyContext db, IJwtTokenService jwt, ILogger<AuthController> log) : ControllerBase
+public class AuthController : ControllerBase
 {
-    [HttpPost("register")]
-    public async Task<ActionResult<AuthResponse>> Register([FromBody] RegisterRequest req)
+    private readonly IConfiguration _configuration;
+    private readonly MyContext _context;
+    private readonly IPasswordHasher<User> _passwordHasher;
+
+    public AuthController(IConfiguration configuration, MyContext context, IPasswordHasher<User> passwordHasher)
     {
-        var email = req.Email.Trim().ToLowerInvariant();
-
-        if (await db.Users.AnyAsync(u => u.Email == email))
-            return Conflict(new { message = "Email is already registered." });
-
-        var (hash, salt) = PasswordHasher.HashPassword(req.Password);
-
-        var user = new User
-        {
-            Email = email,
-            DisplayName = req.DisplayName?.Trim(),
-            PasswordHash = hash,
-            PasswordSalt = salt,
-            IsActive = true
-            // CreatedAt is DB-generated via GETUTCDATE()
-        };
-
-        db.Users.Add(user);
-        await db.SaveChangesAsync();
-
-        // assign default role "User"
-        var roleId = await db.Roles.Where(r => r.Name == "User").Select(r => r.RoleId).SingleAsync();
-        db.UserRoles.Add(new UserRole { UserId = user.UserId, RoleId = roleId });
-        await db.SaveChangesAsync();
-
-        var roles = await db.UserRoles
-            .Where(ur => ur.UserId == user.UserId)
-            .Select(ur => ur.Role.Name)
-            .ToArrayAsync();
-
-        var (token, exp) = jwt.Create(user.Email, user.UserId, roles);
-        return Ok(new AuthResponse(token, exp, user.Email, roles));
+        _configuration = configuration;
+        _context = context;
+        _passwordHasher = passwordHasher;
     }
 
     [HttpPost("login")]
-    public async Task<ActionResult<AuthResponse>> Login([FromBody] LoginRequest req)
+    public IActionResult Login([FromBody] Models.Auth.LoginRequest request)
     {
-        var email = req.Email.Trim().ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(request.DisplayName) || string.IsNullOrWhiteSpace(request.Password))
+            return BadRequest("DisplayName and password are required.");
 
-        var user = await db.Users.SingleOrDefaultAsync(u => u.Email == email);
-        if (user is null || !user.IsActive)
-            return Unauthorized(new { message = "Invalid email or password." });
+        var userLite = _context.User
+            .AsNoTracking()
+            .Where(u => u.DisplayName == request.DisplayName)
+            .Select(u => new { u.UserId, u.DisplayName, u.PasswordHash, u.RoleId })
+            .FirstOrDefault();
 
-        var ok = PasswordHasher.Verify(req.Password, user.PasswordSalt, user.PasswordHash);
-        if (!ok) return Unauthorized(new { message = "Invalid email or password." });
+        if (userLite == null || string.IsNullOrEmpty(userLite.PasswordHash))
+            return Unauthorized("Invalid credentials");
 
-        var roles = await db.UserRoles
-            .Where(ur => ur.UserId == user.UserId)
-            .Select(ur => ur.Role.Name)
-            .ToArrayAsync();
-
-        var (token, exp) = jwt.Create(user.Email, user.UserId, roles);
-        return Ok(new AuthResponse(token, exp, user.Email, roles));
-    }
-
-    // Role assignment (Admin only). Avoids handing out Admin at register time.
-    [Authorize(Roles = "Admin")]
-    [HttpPost("assign-role")]
-    public async Task<IActionResult> AssignRole([FromBody] AssignRoleRequest req)
-    {
-        var email = req.Email.Trim().ToLowerInvariant();
-        var roleName = req.RoleName.Trim();
-
-        if (roleName is not ("Guest" or "User" or "Admin"))
-            return BadRequest(new { message = "Invalid role." });
-
-        var user = await db.Users.SingleOrDefaultAsync(u => u.Email == email);
-        if (user is null) return NotFound(new { message = "User not found." });
-
-        var role = await db.Roles.SingleAsync(r => r.Name == roleName);
-
-        var hasRole = await db.UserRoles.AnyAsync(ur => ur.UserId == user.UserId && ur.RoleId == role.RoleId);
-        if (!hasRole)
+        var userForHash = new User
         {
-            db.UserRoles.Add(new UserRole { UserId = user.UserId, RoleId = role.RoleId });
-            await db.SaveChangesAsync();
-        }
+            UserId = userLite.UserId,
+            DisplayName = userLite.DisplayName,
+            RoleId = userLite.RoleId,
+            PasswordHash = userLite.PasswordHash
+        };
 
-        return Ok(new { message = $"Assigned role '{roleName}' to {email}." });
+        var verify = _passwordHasher.VerifyHashedPassword(userForHash, userLite.PasswordHash, request.Password);
+        if (verify == PasswordVerificationResult.Failed)
+            return Unauthorized("Invalid credentials");
+
+        var roleName = _context.Role
+            .AsNoTracking()
+            .Where(r => r.RoleId == userLite.RoleId)
+            .Select(r => r.Name)
+            .FirstOrDefault() ?? "Guest";
+
+        var claims = new List<Claim>
+    {
+        new Claim(ClaimTypes.Name, userLite.DisplayName),
+        new Claim(ClaimTypes.Role, roleName),
+        new Claim("UserId", userLite.UserId.ToString())
+    };
+
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:Key"]!));
+        var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+
+        var token = new JwtSecurityToken(
+            issuer: _configuration["Jwt:Issuer"],
+            audience: _configuration["Jwt:Audience"],
+            claims: claims,
+            expires: DateTime.UtcNow.AddHours(1),
+            signingCredentials: creds);
+
+        return Ok(new
+        {
+            token = new JwtSecurityTokenHandler().WriteToken(token),
+            user = new { userLite.UserId, DisplayName = userLite.DisplayName, Role = roleName }
+        });
     }
+
+
+    [HttpPost("register")]
+    public IActionResult Register([FromBody] Models.Auth.RegisterRequest model)
+    {
+        if (string.IsNullOrWhiteSpace(model.DisplayName) || string.IsNullOrWhiteSpace(model.Password))
+            return BadRequest("DisplayName and password are required.");
+
+        if (_context.User.Any(u => u.DisplayName == model.DisplayName))
+            return BadRequest("DisplayName already exists");
+
+        // defaults to user role without this code.
+        //var role = _context.Role.FirstOrDefault(r => r.Name == model.Role);
+        //if (role == null)
+        //    return BadRequest("Invalid role");
+
+        var user = new User
+        {
+            DisplayName = model.DisplayName,
+            Email = "default Email",
+            RoleId = 2,
+            IsActive = true,                 
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+
+        user.PasswordHash = _passwordHasher.HashPassword(user, model.Password);
+
+        _context.User.Add(user);
+        _context.SaveChanges();
+
+        return Ok("User registered successfully");
+    }
+
 }
