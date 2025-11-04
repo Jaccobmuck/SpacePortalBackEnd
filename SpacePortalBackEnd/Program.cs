@@ -63,7 +63,13 @@ builder.Services
         };
     });
 
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("ManageUserRoles", p => p.RequireRole("Admin"));
+
+    options.AddPolicy("SelfOrAdmin", p => p.RequireAssertion(ctx =>
+        ctx.User.IsInRole("Admin")));
+});
 
 // If you’re using custom users without full Identity, this gives you hashing:
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();

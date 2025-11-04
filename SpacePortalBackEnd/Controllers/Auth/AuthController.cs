@@ -2,7 +2,6 @@
 using System.Security.Claims;
 using System.Text;
 using Microsoft.AspNetCore.Identity;
-using Microsoft.AspNetCore.Identity.Data;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -59,12 +58,14 @@ public class AuthController : ControllerBase
             .Select(r => r.Name)
             .FirstOrDefault() ?? "Guest";
 
+        // ✅ Fixed: include NameIdentifier claim for userId
         var claims = new List<Claim>
-    {
-        new Claim(ClaimTypes.Name, userLite.DisplayName),
-        new Claim(ClaimTypes.Role, roleName),
-        new Claim("UserId", userLite.UserId.ToString())
-    };
+        {
+            new Claim(ClaimTypes.NameIdentifier, userLite.UserId.ToString()),
+            new Claim(ClaimTypes.Name, userLite.DisplayName),
+            new Claim(ClaimTypes.Role, roleName),
+            new Claim("UserId", userLite.UserId.ToString()) // optional duplicate claim
+        };
 
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:Key"]!));
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
@@ -79,10 +80,14 @@ public class AuthController : ControllerBase
         return Ok(new
         {
             token = new JwtSecurityTokenHandler().WriteToken(token),
-            user = new { userLite.UserId, DisplayName = userLite.DisplayName, Role = roleName }
+            user = new
+            {
+                userLite.UserId,
+                DisplayName = userLite.DisplayName,
+                Role = roleName
+            }
         });
     }
-
 
     [HttpPost("register")]
     public IActionResult Register([FromBody] Models.Auth.RegisterRequest model)
@@ -102,8 +107,8 @@ public class AuthController : ControllerBase
         {
             DisplayName = model.DisplayName,
             Email = "default Email",
-            RoleId = 2,
-            IsActive = true,                 
+            RoleId = 2, // default to regular User role
+            IsActive = true,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
@@ -115,5 +120,4 @@ public class AuthController : ControllerBase
 
         return Ok("User registered successfully");
     }
-
 }

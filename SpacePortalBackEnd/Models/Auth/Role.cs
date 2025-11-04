@@ -9,5 +9,7 @@ namespace SpacePortalBackEnd.Models.Auth
         [Key]
         public long RoleId { get; set; }
         public string Name { get; set; } = string.Empty;
+
+       // public ICollection<UserRole>
     }
 }
