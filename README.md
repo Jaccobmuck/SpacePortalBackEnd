@@ -15,21 +15,6 @@ The backend is built with **ASP.NET Core Web API**, **Entity Framework Core**, a
 - [Architecture Overview](#architecture-overview)
 - [Key Features](#key-features)
 - [Project Structure](#project-structure)
-- [Getting Started](#getting-started)
-  - [Prerequisites](#prerequisites)
-  - [Cloning the Repo](#cloning-the-repo)
-  - [Configuration](#configuration)
-  - [Entity Framework Migrations](#entity-framework-migrations)
-  - [Running the API](#running-the-api)
-- [API Overview](#api-overview)
-  - [Auth Endpoints](#auth-endpoints)
-  - [User & Profile Endpoints](#user--profile-endpoints)
-  - [NASA / Space-Weather Endpoints](#nasa--space-weather-endpoints)
-- [Error Handling & Logging](#error-handling--logging)
-- [Security](#security)
-- [Development Workflow](#development-workflow)
-- [What I Learned](#what-i-learned)
-- [Future Work](#future-work)
 
 ---
 
