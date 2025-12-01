@@ -1,4 +1,3 @@
-# SpacePortalBackEnd
 # SpacePortal Backend
 
 This is the backend API for my **SpacePortal** capstone project.
