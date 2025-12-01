@@ -19,6 +19,13 @@ builder.Services.AddHttpClient("Donki", client =>
     client.BaseAddress = new Uri("https://api.nasa.gov/DONKI/");
 });
 
+// APOD client for controller-style APOD import
+builder.Services.AddHttpClient("NasaApod", client =>
+{
+    client.BaseAddress = new Uri("https://api.nasa.gov/");
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
+
 // ----- CORS (dev-open; tighten for prod) -----
 builder.Services.AddCors(options =>
 {
@@ -71,7 +78,7 @@ builder.Services.AddAuthorization(options =>
         ctx.User.IsInRole("Admin")));
 });
 
-// If you’re using custom users without full Identity, this gives you hashing:
+// Custom User password hashing
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 
 // ----- Swagger with Bearer auth -----
@@ -110,14 +117,14 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI(c =>
     {
-        // Explicit endpoint avoids white/blank Swagger page issues
         c.SwaggerEndpoint("/swagger/v1/swagger.json", "SpacePortal API v1");
     });
 }
 
-// If your launchSettings has only HTTP during dev, consider gating HTTPS redirection:
-app.UseHttpsRedirection();
+// Needed for APOD local images under wwwroot/apod/...
+app.UseStaticFiles();
 
+app.UseHttpsRedirection();
 app.UseRouting();
 app.UseCors("AllowAll");
 app.UseAuthentication();
